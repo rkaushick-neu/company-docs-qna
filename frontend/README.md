@@ -1,7 +1,14 @@
 # React + TypeScript + Vite
 
-## Running the frontend:
+## Install the packages
 ```bash
 cd frontend
-npm run dev -- --host 0.0.0.0
+npm insall
+```
+
+## Running the frontend:
+
+```bash
+cd frontend
+npm run dev
 ```
