@@ -1,0 +1,166 @@
+{
+  "name": "Error Logs",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        96
+      ],
+      "id": "560e24d2-e9fb-4fbc-9269-bf347a1d1fbd",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1DHA04LHkAAVhV0swKMkpsMrrW53rtsLlFKUxUO4zbVc",
+          "mode": "list",
+          "cachedResultName": "Error Logs Company RAG",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1DHA04LHkAAVhV0swKMkpsMrrW53rtsLlFKUxUO4zbVc/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1DHA04LHkAAVhV0swKMkpsMrrW53rtsLlFKUxUO4zbVc/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Errored Workflow": "={{ $json.workflow.name }}",
+            "Workflow URL": "={{ $json.execution.url }}",
+            "Error Description": "={{ $json.execution.error.message + \": \" + $json.execution.error.description }}",
+            "Time": "={{ $now.format('yyyy-MM-dd hh:mm:ss') }}",
+            "Node": "={{ $json.execution.error.node.name }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Errored Workflow",
+              "displayName": "Errored Workflow",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Workflow URL",
+              "displayName": "Workflow URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Error Description",
+              "displayName": "Error Description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Node",
+              "displayName": "Node",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c17f05a6-ef67-47e2-b76b-28db415841b6",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "ixVpVSpFbpn8bYiF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "rishabh.kaushick@gmail.com",
+        "subject": "=Workflow \"{{ $json.workflow.name }}\" Has Errored Out",
+        "emailType": "text",
+        "message": "=Details for your review are as below:\n\nWorkflow Name: {{ $json.workflow.name }}\nURL: {{ $json.execution.url }}\nErrored Node Name: {{ $json.execution.error.node.name }}\nTimestamp: {{ $now.format('yyyy-MM-dd hh:mm:ss') }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        192
+      ],
+      "id": "73872ab9-f50f-47e7-a013-3ae941b4abe9",
+      "name": "Send a message",
+      "webhookId": "2d22232c-f362-4e7f-9993-b6308a145f25",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "fZYIfUQumsQ0mL5q",
+          "name": "Rish_Gmail"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "91766d65-2158-43ba-bb40-14f299ac0e8b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "558d88703fb65b2d0e44613bc35916258b0f0bf983c5d4730c00c424b77ca36a"
+  },
+  "id": "CEgGu4z2ofk2niB2",
+  "tags": []
+}
