@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import type { FormEvent } from "react";
 import type { Employee } from "../types";
 import { API_BASE } from "../types";
+// import sha256 from "crypto-js/sha256"; 
 
 
 // ---------- Login View ----------
@@ -11,25 +12,41 @@ interface LoginProps {
   
   const LoginView: React.FC<LoginProps> = ({ onLogin }) => {
     const [employeeId, setEmployeeId] = useState<string>("");
+    const [password, setPassword] = useState<string>("");
     const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string>("");
   
     const handleLogin = async (e: FormEvent) => {
       e.preventDefault();
       setError("");
-      if (!employeeId.trim()) {
-        setError("Please enter your Employee ID");
+      if (!employeeId.trim() || !password.trim()) {
+        setError("Please enter your Employee ID & Password");
         return;
       }
       setLoading(true);
       try {
         console.log(`${API_BASE}`);
-        const res = await fetch(`${API_BASE}/api/getEmployeeData?employeeId=${employeeId}`);
+        
+        const res = await fetch(`${API_BASE}/api/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            username: employeeId,
+            hashed_password: password,
+          }),
+        });
+
+        // const res = await fetch(`${API_BASE}/api/getEmployeeData?employeeId=${employeeId}`);
         const data = await res.json();
         if (!data.ok) throw new Error(data.detail || "Invalid ID");
+
+        // Pass the employee object to the parent component
         onLogin(data.data);
+      
       } catch (err: any) {
-        setError(err.message);
+        setError(err.message || "Login Failed");
       } finally {
         setLoading(false);
       }
@@ -82,6 +99,8 @@ interface LoginProps {
                   type="password"
                   className="w-full text-center rounded-2xl bg-white/20 backdrop-blur-sm border border-white/30 text-white placeholder-white/70 px-4 py-4 outline-none focus:ring-2 focus:ring-white/50 focus:bg-white/25 transition-all duration-200"
                   placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
                 />
                 <div className="absolute right-4 top-1/2 transform -translate-y-1/2">
