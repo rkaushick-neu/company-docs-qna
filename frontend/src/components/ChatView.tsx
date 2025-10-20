@@ -23,6 +23,12 @@ interface ChatProps {
       setInput("");
       setMessages((m) => [...m, { role: "user", text: msg }]);
       setSending(true);
+      // console.log(`${API_BASE}/api/chat`)
+      // console.log(JSON.stringify({
+      //   message: msg,
+      //   department: employee.department,
+      //   employeeId: employee.employeeId,
+      // }));
       try {
         const res = await fetch(`${API_BASE}/api/chat`, {
           method: "POST",
@@ -100,7 +106,7 @@ interface ChatProps {
 
       {/* Main Frosted Glass Container */}
       <div className="flex-1 p-8 relative z-10">
-        <div>
+        <div className="h-[80vh]">
           {/* Large Frosted Glass Box */}
           <div className="h-full w-full bg-black/30 backdrop-blur-2xl rounded-3xl border border-gray-600/30 shadow-2xl flex flex-col overflow-hidden">
             
