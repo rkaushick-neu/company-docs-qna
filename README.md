@@ -169,27 +169,6 @@ You'll need to configure the following credentials in your n8n instance:
 
 ## Configuration
 
-### Environment Variables
-
-Create a `.env` file in the backend directory:
-
-```env
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/company_rag
-
-# n8n
-N8N_LOGIN_WEBHOOK_URL=https://your-n8n-instance.com/webhook/login-webhook-id
-N8N_CHAT_WEBHOOK_URL=https://your-n8n-instance.com/webhook/chat-webhook-id
-
-# API Keys
-OPENAI_API_KEY=your-openai-api-key
-GOOGLE_GEMINI_API_KEY=your-gemini-api-key
-
-# Qdrant
-QDRANT_URL=https://your-qdrant-instance.com
-QDRANT_API_KEY=your-qdrant-api-key
-```
-
 ### Frontend Configuration
 
 Update the API base URL in `frontend/src/types/index.ts`:
