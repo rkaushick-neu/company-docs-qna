@@ -1,0 +1,200 @@
+{
+  "name": "Login_Validate",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    e.id AS employeeId,\n    e.fullName,\n    e.department\n    -- e.accessLevel\nFROM userCredentials u\nJOIN ragEmployees e ON e.id = u.employeeId\nWHERE u.employeeId = $1\n  AND u.passwordHash = crypt($2, u.passwordHash);\n  -- AND e.status IS TRUE;",
+        "options": {
+          "queryReplacement": "={{ $json.body.username-1000 }}, {{ $json.body.hashed_password }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -128,
+        -80
+      ],
+      "id": "feaa21e6-8e41-480b-baec-daeea47c4786",
+      "name": "Validate User Details",
+      "alwaysOutputData": false,
+      "credentials": {
+        "postgres": {
+          "id": "lD5sC4NkeQUxrTZT",
+          "name": "Postgres Personal"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "4e814214-a54a-4433-aab2-316fae8f2f15",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -352,
+        -80
+      ],
+      "id": "5abe4a8a-fc9c-4835-a27c-98c6a2aa9eab",
+      "name": "Webhook",
+      "webhookId": "4e814214-a54a-4433-aab2-316fae8f2f15"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "99413dec-5555-4e92-a08e-b7a266e10b2f",
+              "leftValue": "={{ $json.employeeid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "notExists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        80,
+        -80
+      ],
+      "id": "4de233ff-268c-4498-8816-3e0ab1449956",
+      "name": "Invalid Credentials?"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"ok\": false,\n  \"error\": \"Invalid username or password\"\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        288,
+        -176
+      ],
+      "id": "81288e19-f0c5-4011-a04e-ad60b2f673b9",
+      "name": "Set Failure Body"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"ok\": true,\n  \"data\": {\n    \"employeeId\": \"{{ $('Validate User Details').item.json.employeeid+1000 }}\",\n    \"employeeName\": \"{{ $('Validate User Details').item.json.fullname }}\",\n    \"department\": \"{{ $('Validate User Details').item.json.department }}\"\n  }\n} ",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        288,
+        16
+      ],
+      "id": "57dced76-6b7e-49eb-82a3-9866dafebff8",
+      "name": "Set Success Body"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        512,
+        -96
+      ],
+      "id": "f38e509f-8a74-408c-90c2-bedb3ed4f1ad",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate User Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate User Details": {
+      "main": [
+        [
+          {
+            "node": "Invalid Credentials?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invalid Credentials?": {
+      "main": [
+        [
+          {
+            "node": "Set Failure Body",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Success Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Failure Body": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Success Body": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f16bcc7c-bd45-400e-bb17-ffcf6ab4575a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "558d88703fb65b2d0e44613bc35916258b0f0bf983c5d4730c00c424b77ca36a"
+  },
+  "id": "Cx2WtJe4id4eAW13",
+  "tags": []
+}

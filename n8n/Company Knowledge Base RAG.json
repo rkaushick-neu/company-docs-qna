@@ -1,0 +1,550 @@
+{
+  "name": "Company Knowledge Base RAG",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=User Question:{{ $('User Details').item.json.body.message }}\n\nContext from documents:\n\n{{ $json.result.points.map((point, index) => `\nResult ${index + 1}:\nSource: ${point.payload.metadata.source || 'Unknown'}\nDocument URL: ${point.payload.metadata.docUrl}\nDocument Title:  ${point.payload.metadata.docName}\nPage Number Range: ${point.payload.metadata.pageRange}\nContent: ${point.payload.text}\n`).join('\\n-----\\n') }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=# Overview\nYou are a helpful AI assistant that provides concise, accurate, and context-aware responses based on document excerpts.\n\n## Context\n- The assistant receives multiple document excerpts as context to answer user queries.  \n- The assistant must synthesize information accurately, avoiding redundancy or speculation.  \n- The goal is to deliver clear, sourced responses in professional, Markdown-formatted output.  \n\n## Instructions:\n1. Analyze all provided document excerpts to identify relevant information to the user question.\n2. Synthesize key insights from multiple sources (only if needed) into a single coherent answer.  \n3. Always include properly formatted clickable Markdown links for all cited documents using the format:  \n   `[Document Title](https://example.com)`  \n4. Include the page number(s) next to each source reference, formatted as:  \n   `Found on page X` or `Found on pages X–Y`.  \n5. If multiple references point to the same document and page, cite it only once.  \n6. Keep responses concise, factual, and neutral—avoid speculation or assumptions.  \n7. Do not fabricate or infer details not supported by the provided documents.  \n\n## Guardrails:\n1. If there is no context provided, then state clearly:\n   `\"You may not have access to the relevant information. Contact your IT Team.\"`  \n2. If insufficient information exists in the provided context, state clearly:  \n   `\"I'm sorry I don't have enough information to answer this question.\"`  \n3. If excerpts partially answer the question but omit key data, summarize what is known and clarify the gap.\nExample:\nUser Question: “What are the deadlines for quarterly returns in Avalara Managed Returns?”\nContext: <Mentions that filing frequencies can be monthly or quarterly, but not the exact dates>\nResponse:\n“The documents confirm that Avalara supports quarterly filing, but specific deadlines are not mentioned. You may need to verify this in the filing schedule.”\nSources:\n[Avalara Managed Returns Overview] (url)\nFound on page 14\n4. If excerpts contradict each other, mention the discrepancy neutrally.\n\nExample:\nUser Question: “When does the filing frequency change take effect?”\nContext: <One excerpt says “end of month,” another says “start of next quarter.”>\nResponse:\n“The documents provide differing details: one mentions that changes take effect at the end of the current month, while another indicates the start of the next quarter. Please verify with the official filing schedule.”\nSources:\n[Avalara Filing Policy](url)\nFound on page 10\n[Managed Returns User Guide] (url)\nFound on page 24\n5. If the question is unrelated to any provided context, clarify it gracefully.\n\nExample:\nUser Question: “What’s the best laptop for using Avalara?”\nContext: <Excerpts only discuss browser or tax software configurations>\nResponse:\n“I'm sorry, but the provided documents don’t include any information about hardware or laptop recommendations.”\n\n\nOutput Example:\n\n\"The answer to the user's question\"\nSources:\n- [Document Title 1](https://drive.google.com/file/d/FILE_ID1/view) \nFound on page _ \n- [Document Title 2](https://drive.google.com/file/d/FILE_ID2/view) \nFound on page _ \n\nNever display raw URLs unless specifically requested.\n"
+        }
+      },
+      "id": "2f50438f-49af-4174-abcc-521ebb762d5c",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        352,
+        256
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-pro",
+        "options": {}
+      },
+      "id": "05ec61e7-b812-4d5c-b632-699b0c5f25ab",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "position": [
+        208,
+        480
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "Wb5Uk0ONMFUp3fER",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "input",
+              "value": "={{ $json.body.message }}"
+            },
+            {
+              "name": "model",
+              "value": "text-embedding-3-small"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "embed-user-question",
+      "name": "Embed User Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        -608,
+        240
+      ],
+      "typeVersion": 4.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "4QE1VFWK8v5atbN0",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "15986fbc-9074-4bea-8ad6-4992ee21d8b0",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1312,
+        240
+      ],
+      "id": "192891bc-f876-468a-964a-84d488633d12",
+      "name": "Webhook",
+      "webhookId": "15986fbc-9074-4bea-8ad6-4992ee21d8b0"
+    },
+    {
+      "parameters": {
+        "resource": "search",
+        "operation": "queryPoints",
+        "collectionName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "company_knowledge_base",
+          "cachedResultName": "company_knowledge_base"
+        },
+        "query": "={\n  \"fusion\": \"rrf\"\n}",
+        "limit": 2,
+        "filter": "={\n  \"must\": [\n    {\n      \"key\": \"metadata.team\",\n      \"match\": {\n        \"value\": \"{{ $('User Details').item.json.body.department }}\"\n      }\n    }\n  ]\n}\n",
+        "prefetch": "=[\n  {\n    \"query\": [{{ $json.data[0].embedding }}],\n     \"using\": \"open_ai_small\",\n     \"limit\": 10\n  },\n  {\n    \"query\": {\n      \"text\": \"{{ $('User Details').item.json.body.message }}\",\n      \"model\": \"qdrant/bm25\"\n    },\n    \"using\": \"bm25\",\n    \"limit\": 10\n  }\n]",
+        "requestOptions": {}
+      },
+      "id": "search-qdrant-hybrid",
+      "name": "Search Qdrant with Hybrid",
+      "type": "n8n-nodes-qdrant.qdrant",
+      "position": [
+        -432,
+        240
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "qdrantRestApi": {
+          "id": "HXnYNUrshYOQcBYj",
+          "name": "Qdrant account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "search",
+        "operation": "queryPoints",
+        "collectionName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "company_knowledge_base",
+          "cachedResultName": "company_knowledge_base"
+        },
+        "query": "={\n  \"fusion\": \"rrf\"\n}",
+        "limit": 1,
+        "filter": "={\n  \"must\": [\n    {{ $json.result.points.map(point => ({\n      \"key\": \"metadata.sectionTitle\",\n      \"match\": { \"value\": point.payload.metadata.sectionTitle }\n    })) }}\n  ]\n}\n",
+        "prefetch": "=[\n  {\n    \"query\":[\n{{ $('Embed User Question').item.json.data[0].embedding }}],\n     \"using\": \"open_ai_small\",\n     \"limit\": 10\n  },\n  {\n    \"query\": {\n      \"text\": \"{{ $('User Details').item.json.body.message }}\",\n      \"model\": \"qdrant/bm25\"\n    },\n    \"using\": \"bm25\",\n    \"limit\": 10\n  }\n]",
+        "requestOptions": {}
+      },
+      "id": "52a34f0a-b0e4-4930-a361-337144417c22",
+      "name": "Expand Context",
+      "type": "n8n-nodes-qdrant.qdrant",
+      "position": [
+        64,
+        112
+      ],
+      "typeVersion": 1,
+      "credentials": {
+        "qdrantRestApi": {
+          "id": "HXnYNUrshYOQcBYj",
+          "name": "Qdrant account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1024,
+        560
+      ],
+      "id": "1ed6db35-78bd-4e25-ad8f-86115e7bb83f",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "operation": "checkIfEvaluating"
+      },
+      "type": "n8n-nodes-base.evaluation",
+      "typeVersion": 4.8,
+      "position": [
+        832,
+        256
+      ],
+      "id": "6a6c5209-0add-4573-878c-da8f6ca44d54",
+      "name": "Evaluation1"
+    },
+    {
+      "parameters": {
+        "operation": "setMetrics",
+        "expectedAnswer": "={{ $('When fetching a dataset row').item.json['Expected (Ground Truth) Answer'] }}",
+        "actualAnswer": "={{ $('AI Agent').item.json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.evaluation",
+      "typeVersion": 4.8,
+      "position": [
+        1040,
+        160
+      ],
+      "id": "a8f08e55-7c78-4d50-a9e8-10aa1676681f",
+      "name": "Evaluation2"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1184,
+        352
+      ],
+      "id": "c3f66797-a681-4deb-9611-97243d2daf09",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "4QE1VFWK8v5atbN0",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "source": "googleSheets",
+        "documentId": {
+          "__rl": true,
+          "value": "1izqNxzMRC17R39ARWUNmUD4c0Rv_J77_bIk2msR3-Xs",
+          "mode": "list",
+          "cachedResultName": "n8n_company_rag_evals",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1izqNxzMRC17R39ARWUNmUD4c0Rv_J77_bIk2msR3-Xs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1izqNxzMRC17R39ARWUNmUD4c0Rv_J77_bIk2msR3-Xs/edit#gid=0"
+        },
+        "outputs": {
+          "values": [
+            {
+              "outputName": "Model Output",
+              "outputValue": "={{ $('AI Agent').item.json.output }}"
+            },
+            {
+              "outputName": "Score",
+              "outputValue": "={{ $json.Correctness }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.evaluation",
+      "typeVersion": 4.8,
+      "position": [
+        1392,
+        160
+      ],
+      "id": "9f3057fd-e7cb-44bf-9ff0-5ed180a9cca1",
+      "name": "Evaluation3",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "ixVpVSpFbpn8bYiF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0cee75dd-757b-424e-9518-d0fa54e50019",
+              "name": "body",
+              "value": "={\n\"message\": \n\"{{ $json['User Question'] || $json.body.message }}\",\n\"department\": \n\"{{ $json.Department || $json.body.department }}\",\n\"employeeId\": \n\"{{ $json['Employee Id'] ||  $json.body.employeeId }}\"\n}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -912,
+        240
+      ],
+      "id": "326a7748-0e57-4987-9909-744551187c62",
+      "name": "User Details"
+    },
+    {
+      "parameters": {
+        "source": "googleSheets",
+        "documentId": {
+          "__rl": true,
+          "value": "1izqNxzMRC17R39ARWUNmUD4c0Rv_J77_bIk2msR3-Xs",
+          "mode": "list",
+          "cachedResultName": "n8n_company_rag_evals",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1izqNxzMRC17R39ARWUNmUD4c0Rv_J77_bIk2msR3-Xs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1izqNxzMRC17R39ARWUNmUD4c0Rv_J77_bIk2msR3-Xs/edit#gid=0"
+        }
+      },
+      "type": "n8n-nodes-base.evaluationTrigger",
+      "typeVersion": 4.7,
+      "position": [
+        -1312,
+        528
+      ],
+      "id": "1b8d2212-54e2-4eac-aae4-f4cd197304eb",
+      "name": "When fetching a dataset row",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "ixVpVSpFbpn8bYiF",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a61471be-cf8b-4988-97cc-0d03a7e2a927",
+              "leftValue": "={{ $json.result.points }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "array",
+                "operation": "lengthGt",
+                "rightType": "number"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -224,
+        240
+      ],
+      "id": "b5a3ff9d-b0b8-4312-ad02-126a2ad187d7",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('User Details').item.json.body.employeeId }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        496
+      ],
+      "id": "6be76ca0-2c3e-4ea7-8f9f-ed6db68a631a",
+      "name": "Simple Memory"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Embed User Question": {
+      "main": [
+        [
+          {
+            "node": "Search Qdrant with Hybrid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "main": [
+        []
+      ],
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "User Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Evaluation1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Qdrant with Hybrid": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Context": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluation1": {
+      "main": [
+        [
+          {
+            "node": "Evaluation2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Evaluation2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluation2": {
+      "main": [
+        [
+          {
+            "node": "Evaluation3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Details": {
+      "main": [
+        [
+          {
+            "node": "Embed User Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When fetching a dataset row": {
+      "main": [
+        [
+          {
+            "node": "User Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Expand Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false,
+    "errorWorkflow": "CEgGu4z2ofk2niB2"
+  },
+  "versionId": "6781e0ac-02c6-4a32-a209-b5e9561e4838",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "558d88703fb65b2d0e44613bc35916258b0f0bf983c5d4730c00c424b77ca36a"
+  },
+  "id": "zL3mecFUnepl6BP8",
+  "tags": []
+}

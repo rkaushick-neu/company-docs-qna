@@ -1,0 +1,659 @@
+{
+  "name": "File Triggers",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOneDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1952,
+        0
+      ],
+      "id": "c039702d-f923-4cd4-a600-6e5833cc4376",
+      "name": "Microsoft OneDrive Trigger",
+      "credentials": {
+        "microsoftOneDriveOAuth2Api": {
+          "id": "mhrCwaQZ4v4mJkpl",
+          "name": "Microsoft Drive account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": "={{ $json.id }}"
+      },
+      "type": "n8n-nodes-base.microsoftOneDrive",
+      "typeVersion": 1,
+      "position": [
+        -1648,
+        0
+      ],
+      "id": "87c66af8-f9e1-4bbe-b5a3-e2ad3dbd730a",
+      "name": "Download a file",
+      "credentials": {
+        "microsoftOneDriveOAuth2Api": {
+          "id": "mhrCwaQZ4v4mJkpl",
+          "name": "Microsoft Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "file",
+        "operation": "get",
+        "fileId": "={{ $json.body.event.file.id }}"
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        -1680,
+        272
+      ],
+      "id": "db49a68f-3331-4bce-bb84-f9fa2c796fa1",
+      "name": "Get a file",
+      "webhookId": "009477ed-5483-481e-982c-49e6a0a1c166",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "2FLHb9cC1B8eoMYC",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url_private_download }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "slackApi",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1328,
+        272
+      ],
+      "id": "9dd5c7ca-8003-467b-915d-84880e09ed62",
+      "name": "Get Binary",
+      "credentials": {
+        "slackApi": {
+          "id": "5L4DxSExeAAUDP17",
+          "name": "Slack account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize metadata from Google Drive, OneDrive, and Slack into one schema.\n// Output items look like:\n// {\n//   \"doc id\": \"GoogleDrive:1VIT35V0pX92BtJ5_V0jn50lEOHLkKKZr\",\n//   \"doc_name\": \"Shopify Q2 Press Release.pdf\",\n//   \"doc type\": \"pdf\",\n//   \"source\": \"GoogleDrive\",\n//   \"team\": \"\",\n//   \"created at\": \"2025-10-06T00:17:28.686Z\"\n// }\n\nconst extFromName = (name) =>\n  (typeof name === 'string' && name.includes('.'))\n    ? name.split('.').pop().toLowerCase()\n    : '';\n\nconst typeFromMime = (mime) =>\n  (typeof mime === 'string' && mime.includes('/'))\n    ? mime.split('/').pop().toLowerCase()\n    : (mime || '');\n\n// OPTIONAL fallback UUID v4 (Math.random-based; use only if you truly need random IDs)\nconst uuidv4Fallback = () =>\n  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n\nconst detectSource = (obj) => {\n  if (obj?.kind === 'drive#file') return 'GoogleDrive';\n  if (obj?.webUrl && obj?.path && obj?.id) return 'OneDrive';\n  if (obj?.url_private_download && obj?.mimetype) return 'Slack';\n  return 'Unknown';\n};\n\nconst nativeIdFor = (source, obj) => {\n  if (source === 'GoogleDrive') return obj.id;\n  if (source === 'OneDrive')  return obj.id;\n  if (source === 'Slack')     return obj.id;\n  return obj.id || obj.name || '';\n};\n\nconst makeDocId = (source, obj) => {\n  const native = nativeIdFor(source, obj);\n  if (native) return `${source}:${native}`;\n  // If no native id exists, fall back to a UUID (prefer Web Crypto if present)\n  const rnd = (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')\n    ? globalThis.crypto.randomUUID()\n    : uuidv4Fallback();\n  return `${source}:${rnd}`;\n};\n\nconst normalizeOne = (obj) => {\n  const source   = detectSource(obj);\n  const docName  = obj.name || obj.originalFilename || obj.title || 'unknown';\n  const docType  =\n    obj.fileExtension ||\n    obj.filetype ||\n    extFromName(docName) ||\n    typeFromMime(obj.mimeType || obj.mimetype) ||\n    'unknown';\n\n  let createdAt = null;\n  if (source === 'GoogleDrive') {\n    createdAt = obj.createdTime || obj.modifiedTime || null;\n  } else if (source === 'OneDrive') {\n    createdAt = obj.createdDateTime || obj.lastModifiedDateTime || null;\n  } else if (source === 'Slack') {\n    createdAt = obj.created\n      ? new Date(obj.created * 1000).toISOString()\n      : (obj.timestamp ? new Date(obj.timestamp * 1000).toISOString() : null);\n  }\n\n  // ✅ NEW: Determine document URL\n  let docUrl = '';\n  if (source === 'GoogleDrive') {\n    docUrl = obj.webViewLink || obj.webContentLink || '';\n  } else if (source === 'OneDrive') {\n    docUrl = obj.webUrl || '';\n  } else if (source === 'Slack') {\n    docUrl = obj.url_private_download || obj.permalink || '';\n  }\n\n  return {\n    'docId':     makeDocId(source, obj),\n    'docName':   docName,\n    'docType':   String(docType || 'unknown').toLowerCase(),\n    'source':     source,\n    'team':       $input.first().json.team, // fill downstream if you want (e.g., from path/channel/folder rules)\n    'createdAt': createdAt || new Date().toISOString(),\n    'docUrl':     docUrl || '',\n  };\n};\n\n/** @type {any[]} */\nconst out = [];\n\nfor (const item of $input.all()) {\n  const json = item.json;\n  const binary = item.binary; // preserved as-is for downstream nodes\n\n  if (Array.isArray(json)) {\n    // If your upstream node sends a list (like Drive listFiles), normalize each\n    for (const obj of json) {\n      out.push({ json: normalizeOne(obj), binary });\n    }\n  } else {\n    out.push({ json: normalizeOne(json), binary });\n  }\n}\n\nreturn out;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -784,
+        0
+      ],
+      "id": "0066a64b-3a4f-425d-92ea-7a0054d5c0e4",
+      "name": "Consistent Schema"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "vmoJG4GGDwgCE6VK",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/vmoJG4GGDwgCE6VK",
+          "cachedResultName": "Insert MAIN"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -544,
+        0
+      ],
+      "id": "0d01822e-3569-4a07-84a8-05f79a3e62a2",
+      "name": "Call Insert Wf",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "4546f5ac-8d3c-4b60-9042-43eb07f57729",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1968,
+        272
+      ],
+      "id": "9e0f22a0-ef00-4271-b836-cf5e813cc284",
+      "name": "Slack Trigger",
+      "webhookId": "4546f5ac-8d3c-4b60-9042-43eb07f57729",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d5e2fc4a-dcdd-4b2b-9225-570d7dfdfb4e",
+              "name": "team",
+              "value": "Engineering",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1360,
+        0
+      ],
+      "id": "8dc00d0c-8c30-4006-a35a-b1db4b048414",
+      "name": "Set Engineering Team Field"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1648,
+        -480
+      ],
+      "id": "5ddbf5d3-2503-48df-905c-b8a4ef49e8a5",
+      "name": "Download AvaTax File",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Z0ULW7Rl2bZeLbpO",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1408ae47-3de6-4b8d-8d0c-14f39235a55c",
+              "name": "team",
+              "value": "AvaTax",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1360,
+        -480
+      ],
+      "id": "95a76272-fe85-4c08-b596-eeebc5e9c332",
+      "name": "Set AvaTax Team Field"
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1648,
+        -240
+      ],
+      "id": "50968031-c297-4eab-8f8b-db72ee8f3e66",
+      "name": "Download Managed Returns File",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Z0ULW7Rl2bZeLbpO",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "290df497-29c0-4958-857a-5d0e35b22279",
+              "name": "team",
+              "value": "Managed Returns",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1360,
+        -240
+      ],
+      "id": "c32bfc0a-4e08-432e-9f48-0c020835a867",
+      "name": "Set 'Managed Returns' Team Field",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "15wiWh2uh59edcZzRUG_eUdd6zdYoJtL4",
+          "mode": "list",
+          "cachedResultName": "AvaTax",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/15wiWh2uh59edcZzRUG_eUdd6zdYoJtL4"
+        },
+        "event": "fileCreated",
+        "options": {
+          "fileType": "all"
+        }
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1968,
+        -480
+      ],
+      "id": "89df4cfd-eb2d-4826-982b-d7655f8cf203",
+      "name": "AvaTax Product Google Drive Trigger",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Z0ULW7Rl2bZeLbpO",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "triggerOn": "specificFolder",
+        "folderToWatch": {
+          "__rl": true,
+          "value": "1fPJ_3JUChGbAvXTbQhXQNQ9GFMn1a5EZ",
+          "mode": "list",
+          "cachedResultName": "Managed Returns",
+          "cachedResultUrl": "https://drive.google.com/drive/folders/1fPJ_3JUChGbAvXTbQhXQNQ9GFMn1a5EZ"
+        },
+        "event": "fileCreated",
+        "options": {
+          "fileType": "all"
+        }
+      },
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1968,
+        -240
+      ],
+      "id": "d30678f7-c33c-430f-a9d5-9badb3b19526",
+      "name": "Managed Returns Product Google Drive Trigger",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "Z0ULW7Rl2bZeLbpO",
+          "name": "Google Drive account"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Managed Returns Product Google Drive Trigger": [
+      {
+        "json": {
+          "parents": [
+            "1fPJ_3JUChGbAvXTbQhXQNQ9GFMn1a5EZ"
+          ],
+          "lastModifyingUser": {
+            "displayName": "rishabh.kaushick.projects",
+            "kind": "drive#user",
+            "me": false,
+            "permissionId": "01289666984838442928",
+            "emailAddress": "rishabh.kaushick.projects@gmail.com",
+            "photoLink": "https://lh3.googleusercontent.com/a-/ALV-UjXWhaXiRreWsMBCkE8oqRP6S9SGBClfH-2qQHa4A2xPGrrA_fY=s64"
+          },
+          "owners": [
+            {
+              "displayName": "rishabh.kaushick.projects",
+              "kind": "drive#user",
+              "me": false,
+              "permissionId": "01289666984838442928",
+              "emailAddress": "rishabh.kaushick.projects@gmail.com",
+              "photoLink": "https://lh3.googleusercontent.com/a-/ALV-UjXWhaXiRreWsMBCkE8oqRP6S9SGBClfH-2qQHa4A2xPGrrA_fY=s64"
+            }
+          ],
+          "permissions": [
+            {
+              "kind": "drive#permission",
+              "id": "16861050542062813150",
+              "type": "user",
+              "emailAddress": "gautshinde@gmail.com",
+              "role": "writer",
+              "displayName": "Gautami Shinde",
+              "photoLink": "https://lh3.googleusercontent.com/a/ACg8ocKj2_WLjoO6HjlbfqPK_vDcPEvkI2YxhdX29nwjiFHb_skJHA=s64",
+              "deleted": false,
+              "pendingOwner": false
+            },
+            {
+              "kind": "drive#permission",
+              "id": "01289666984838442928",
+              "type": "user",
+              "emailAddress": "rishabh.kaushick.projects@gmail.com",
+              "role": "owner",
+              "displayName": "rishabh.kaushick.projects",
+              "photoLink": "https://lh3.googleusercontent.com/a-/ALV-UjXWhaXiRreWsMBCkE8oqRP6S9SGBClfH-2qQHa4A2xPGrrA_fY=s64",
+              "deleted": false,
+              "pendingOwner": false
+            }
+          ],
+          "spaces": [
+            "drive"
+          ],
+          "capabilities": {
+            "canAcceptOwnership": false,
+            "canAddChildren": false,
+            "canAddMyDriveParent": false,
+            "canChangeCopyRequiresWriterPermission": false,
+            "canChangeItemDownloadRestriction": false,
+            "canChangeSecurityUpdateEnabled": false,
+            "canChangeViewersCanCopyContent": false,
+            "canComment": true,
+            "canCopy": true,
+            "canDelete": false,
+            "canDisableInheritedPermissions": false,
+            "canDownload": true,
+            "canEdit": true,
+            "canEnableInheritedPermissions": true,
+            "canListChildren": false,
+            "canModifyContent": true,
+            "canModifyContentRestriction": true,
+            "canModifyEditorContentRestriction": true,
+            "canModifyOwnerContentRestriction": false,
+            "canModifyLabels": false,
+            "canMoveChildrenWithinDrive": false,
+            "canMoveItemIntoTeamDrive": false,
+            "canMoveItemOutOfDrive": false,
+            "canMoveItemWithinDrive": true,
+            "canReadLabels": false,
+            "canReadRevisions": true,
+            "canRemoveChildren": false,
+            "canRemoveContentRestriction": false,
+            "canRemoveMyDriveParent": true,
+            "canRename": true,
+            "canShare": true,
+            "canTrash": false,
+            "canUntrash": false
+          },
+          "permissionIds": [
+            "16861050542062813150",
+            "01289666984838442928"
+          ],
+          "linkShareMetadata": {
+            "securityUpdateEligible": false,
+            "securityUpdateEnabled": true
+          },
+          "downloadRestrictions": {
+            "itemDownloadRestriction": {
+              "restrictedForReaders": false,
+              "restrictedForWriters": false
+            },
+            "effectiveDownloadRestrictionWithContext": {
+              "restrictedForReaders": false,
+              "restrictedForWriters": false
+            }
+          },
+          "kind": "drive#file",
+          "id": "1EKh760vEf3HIdFrnDHP4ATRSyqf9zkFN",
+          "name": "Avalara Managed Returns 2025-10-17-21-19-09.pdf",
+          "mimeType": "application/pdf",
+          "starred": false,
+          "trashed": false,
+          "explicitlyTrashed": false,
+          "version": "3",
+          "webContentLink": "https://drive.google.com/uc?id=1EKh760vEf3HIdFrnDHP4ATRSyqf9zkFN&export=download",
+          "webViewLink": "https://drive.google.com/file/d/1EKh760vEf3HIdFrnDHP4ATRSyqf9zkFN/view?usp=drivesdk",
+          "iconLink": "https://drive-thirdparty.googleusercontent.com/16/type/application/pdf",
+          "hasThumbnail": true,
+          "thumbnailLink": "https://lh3.googleusercontent.com/drive-storage/AJQWtBOs02sW_bwGu5nZAFcDFfQtfylmPqadyrwgxb79r9bMGcdCeDtjk4TzVdZQSZMXjp4dYGKHMpN9L9bdUQ8JNG12EivGLd1s_6pKxOrLgwVxu4M=s220",
+          "thumbnailVersion": "1",
+          "viewedByMe": false,
+          "createdTime": "2025-10-19T00:08:27.170Z",
+          "modifiedTime": "2025-10-18T01:33:54.000Z",
+          "modifiedByMe": false,
+          "shared": true,
+          "ownedByMe": false,
+          "viewersCanCopyContent": true,
+          "copyRequiresWriterPermission": false,
+          "writersCanShare": true,
+          "originalFilename": "Avalara Managed Returns 2025-10-17-21-19-09.pdf",
+          "fullFileExtension": "pdf",
+          "fileExtension": "pdf",
+          "md5Checksum": "8160d966a09d41d3154ec73ae35ffeda",
+          "sha1Checksum": "e234a80b98802847c30c9713fa943264faef8de7",
+          "sha256Checksum": "73b7e08e59e4608bb75b69b9e078ffab7e99bcebbd32a3596602534e346e97d9",
+          "size": "272496",
+          "quotaBytesUsed": "272496",
+          "headRevisionId": "0ByrYhdn2LIsVVDBXM3BmbFlOdUtuVTVuM21YVVZtNUIrcjFzPQ",
+          "isAppAuthorized": false,
+          "inheritedPermissionsDisabled": false
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Microsoft OneDrive Trigger": {
+      "main": [
+        [
+          {
+            "node": "Download a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download a file": {
+      "main": [
+        [
+          {
+            "node": "Set Engineering Team Field",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a file": {
+      "main": [
+        [
+          {
+            "node": "Get Binary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Binary": {
+      "main": [
+        [
+          {
+            "node": "Consistent Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consistent Schema": {
+      "main": [
+        [
+          {
+            "node": "Call Insert Wf",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Engineering Team Field": {
+      "main": [
+        [
+          {
+            "node": "Consistent Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download AvaTax File": {
+      "main": [
+        [
+          {
+            "node": "Set AvaTax Team Field",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set AvaTax Team Field": {
+      "main": [
+        [
+          {
+            "node": "Consistent Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Managed Returns File": {
+      "main": [
+        [
+          {
+            "node": "Set 'Managed Returns' Team Field",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set 'Managed Returns' Team Field": {
+      "main": [
+        [
+          {
+            "node": "Consistent Schema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AvaTax Product Google Drive Trigger": {
+      "main": [
+        [
+          {
+            "node": "Download AvaTax File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Managed Returns Product Google Drive Trigger": {
+      "main": [
+        [
+          {
+            "node": "Download Managed Returns File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3b455984-44e1-433c-b00b-aa311de1d873",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "558d88703fb65b2d0e44613bc35916258b0f0bf983c5d4730c00c424b77ca36a"
+  },
+  "id": "QPwziXsHcjH0a8PD",
+  "tags": []
+}
