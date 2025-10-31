@@ -1,0 +1,12 @@
+[project]
+name = "company-docs-qna-backend"
+version = "0.1.0"
+description = "FastAPI backend for Company RAG Chat App"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.120.4",
+    "httpx>=0.28.1",
+    "python-dotenv>=1.2.1",
+    "uvicorn[standard]>=0.38.0",
+]
