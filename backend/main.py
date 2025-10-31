@@ -3,6 +3,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx  # for async calls to n8n
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="United RAG Chat API")
 
@@ -26,8 +30,7 @@ class LoginBody(BaseModel):
     username: str
     hashed_password: str  # frontend should send hashed password
 
-N8N_TEST_LOGIN_WEBHOOK_URL = "https://n8n.gautamishinde.com/webhook-test/4e814214-a54a-4433-aab2-316fae8f2f15"
-N8N_LOGIN_WEBHOOK_URL = "https://n8n.gautamishinde.com/webhook/4e814214-a54a-4433-aab2-316fae8f2f15"
+N8N_LOGIN_WEBHOOK_URL = os.getenv("N8N_LOGIN_WEBHOOK_URL")
 
 @app.post("/api/login")
 async def login_proxy(body: LoginBody):
@@ -77,8 +80,7 @@ class ChatBody(BaseModel):
     employeeId: str | None = None
 
 
-N8N_TEST_WEBHOOK_URL = "https://n8n.gautamishinde.com/webhook-test/15986fbc-9074-4bea-8ad6-4992ee21d8b0"
-N8N_WEBHOOK_URL = "https://n8n.gautamishinde.com/webhook/15986fbc-9074-4bea-8ad6-4992ee21d8b0"
+N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
 
 @app.post("/api/chat")
 async def chat_proxy(body: ChatBody):
