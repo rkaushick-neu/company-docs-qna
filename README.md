@@ -60,17 +60,32 @@ cd company-docs-qna
 
 ### 2. Backend Setup
 
+The backend uses **uv** (a modern, fast Python package manager) for dependency management and environment handling.
+
+#### Install uv
+
+**macOS/Linux:**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+#### Run the Backend
+
 ```bash
 cd backend
-
-# Install dependencies (if requirements.txt exists)
-pip install fastapi uvicorn httpx
-
-# Run the backend server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uv sync  # Installs dependencies based on pyproject.toml and uv.lock
+uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The backend will be available at `http://localhost:8000`
+
+Environment variables (like N8N webhook URLs and API keys) are loaded automatically from your `.env` file.  
+`python-dotenv` is installed via uv dependencies, so configuration via `.env` works out of the box.
 
 ### 3. Frontend Setup
 
@@ -123,11 +138,12 @@ You'll need to configure the following credentials in your n8n instance:
 
 #### Workflow Configuration
 
-1. **Update Webhook URLs** in `backend/main.py`:
-   ```python
-   N8N_LOGIN_WEBHOOK_URL = "https://your-n8n-instance.com/webhook/your-login-webhook-id"
-   N8N_WEBHOOK_URL = "https://your-n8n-instance.com/webhook/your-chat-webhook-id"
-   ```
+1. **Set up Environment Variables**
+   - Copy the example environment file:
+     ```bash
+     cp backend/.env.example backend/.env
+     ```
+   - Then open `.env` and fill in your actual credentials and webhook URLs for your n8n instance.
 
 2. **Configure Database Schema**:
    ```sql
