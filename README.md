@@ -1,6 +1,6 @@
-# Company RAG Chat Application
+# Multi-Tenant RAG System
 
-A sophisticated Retrieval-Augmented Generation (RAG) chat application designed for company knowledge management. This application allows employees to query company documents through an intelligent AI-powered chat interface, with department-specific access controls and secure authentication.
+A Retrieval-Augmented Generation (RAG) chat application designed for company knowledge management. This application allows employees to query company documents through an intelligent AI-powered chat interface, with department-specific access controls (similar to RBAC) and secure hashing-based authentication.
 
 ## Features
 
@@ -21,6 +21,8 @@ A sophisticated Retrieval-Augmented Generation (RAG) chat application designed f
 - **Evaluation System**: Built-in response quality evaluation using Google Sheets integration
 
 ## Architecture
+
+![Project Architecture](./assets/images/multi-tenant-rag-architecture.png)
 
 The application consists of three main components:
 
